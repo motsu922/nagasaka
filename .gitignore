@@ -1,0 +1,11 @@
+# ローカル作業ファイル（Gitで管理しない）
+*.xlsx
+*.xlsm
+*.docx
+~$*
+
+# Claude Code内部
+.claude/
+
+# nagasaka-appは別管理
+nagasaka-app/

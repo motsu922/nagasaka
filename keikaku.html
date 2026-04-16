@@ -502,7 +502,7 @@ function WorkerScreen({role,line,plans,master,anomalyTypes,onComplete,onUndo,onB
   const[showQRScan,setShowQRScan]=useState(false);
   const[imgSize,setImgSize]=useState(()=>{try{return parseInt(localStorage.getItem('imgSize'))||120;}catch{return 120;}});
   function changeImgSize(v){const s=parseInt(v);setImgSize(s);try{localStorage.setItem('imgSize',s);}catch{}}
-  const ll=(role==='リフトマン'||role==='製品段取り'||role==='出荷')?null:line;
+  const ll=(role==='リフトマン'||role==='製品段取り'||role==='出荷'||role==='ハンガー段取り')?null:line;
   const items=plans.filter(p=>ll?p.line===ll:true).sort((x,y)=>x.kakeTime.localeCompare(y.kakeTime));
   const done=items.filter(p=>p.completions?.[role]?.done);
   const pend=items.filter(p=>!p.completions?.[role]?.done);
@@ -512,6 +512,7 @@ function WorkerScreen({role,line,plans,master,anomalyTypes,onComplete,onUndo,onB
   const curImg=cur?master[cur.seiban]?.imageUrl:null;
   const nxtImg=nxt?master[nxt.seiban]?.imageUrl:null;
   const fields=cur?getFields(role,cur,master):[];
+  const isListRole=role==='リフトマン'||role==='ハンガー段取り';
   useEffect(()=>setFrac(''),[cur?.id]);
 
   async function handleComplete(){
@@ -531,6 +532,82 @@ function WorkerScreen({role,line,plans,master,anomalyTypes,onComplete,onUndo,onB
     catch(e){alert('取り消しに失敗: '+e.message);}
     finally{setSaving(false);}
   }
+
+  if(isListRole)return(
+    <div className="screen" style={{background:'#F1EFE8'}}>
+      <NavBar title={role} onBack={onBack}
+        right={<button onClick={()=>setShowAnomaly(true)} style={{minHeight:40,padding:'0 14px',borderRadius:10,border:'2px solid #E24B4A',background:'#FCEBEB',color:'#A32D2D',fontSize:13,fontWeight:700}}>{t('異常')}</button>}/>
+      <div style={{padding:'12px 16px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#888',marginBottom:5}}>
+          <span>本日の進捗</span><span style={{fontWeight:600,color:'#111'}}>{done.length}/{items.length}{t('件')}　{pct}%</span>
+        </div>
+        <div style={{height:8,background:'#E0DED8',borderRadius:4,marginBottom:16,overflow:'hidden'}}>
+          <div style={{height:'100%',background:a,borderRadius:4,width:pct+'%',transition:'width .5s'}}/>
+        </div>
+        {items.length===0?(
+          <div style={{textAlign:'center',padding:'64px 0',color:'#aaa'}}>計画が登録されていません</div>
+        ):(
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {items.map(item=>{
+              const isDone=item.completions?.[role]?.done;
+              const m=master[item.seiban]||{};
+              const hn=m.hangerName||item.hangerName||'';
+              const hc=m.hangers||item.hangers||'';
+              const lc=item.line==='A'?'#185FA5':'#534AB7';
+              const lb=item.line==='A'?'#E6F1FB':'#EEEDFE';
+              const details=[];
+              if(hn)details.push(['ハンガー名称',hn]);
+              if(hc)details.push(['ハンガー本数',hc+'本']);
+              if(role==='リフトマン'){
+                if(item.products)details.push(['製品数',item.products+'個']);
+                if(m.width||item.width)details.push(['掛幅',(m.width||item.width)+'mm']);
+              }
+              if(role==='ハンガー段取り'){
+                if(m.voltage||item.voltage)details.push(['設定電圧',(m.voltage||item.voltage)+'V']);
+                if(m.emptyHooks)details.push(['空フック数',m.emptyHooks+'個']);
+                if(m.continuous)details.push(['連続本数',m.continuous+'本']);
+              }
+              if(item.reqTime)details.push(['所要時間',item.reqTime]);
+              return(
+                <div key={item.id} style={{padding:'14px 16px',borderRadius:16,background:isDone?'#F8F7F4':'#fff',border:`2px solid ${isDone?'#E0DED8':a}`,opacity:isDone?0.55:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:details.length?10:0}}>
+                    <span style={{fontSize:15,fontWeight:700,color:lc,background:lb,padding:'5px 12px',borderRadius:10,flexShrink:0}}>{item.line}ライン</span>
+                    <div style={{flex:1,fontSize:26,fontWeight:700,color:isDone?'#aaa':'#111'}}>{item.seiban}</div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:20,fontWeight:700,color:isDone?'#aaa':a}}>{item.kakeTime}</div>
+                      {item.reqTime&&<div style={{fontSize:12,color:'#aaa'}}>({item.reqTime})</div>}
+                    </div>
+                  </div>
+                  {details.length>0&&(
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px',marginBottom:12,padding:'10px 12px',background:'#F8F7F4',borderRadius:10}}>
+                      {details.map(([lb2,v])=>(
+                        <div key={lb2}>
+                          <div style={{fontSize:11,color:'#999',marginBottom:2}}>{lb2}</div>
+                          <div style={{fontSize:17,fontWeight:600,color:'#111'}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isDone?(
+                    <div style={{textAlign:'center',padding:'10px',background:'#E8F5E1',borderRadius:10}}>
+                      <span style={{fontSize:15,fontWeight:700,color:'#3B6D11'}}>✓ 完了</span>
+                    </div>
+                  ):(
+                    <button onClick={async()=>{if(saving)return;setSaving(true);try{await onComplete(item.id,role,'');}catch(e){alert('保存に失敗: '+e.message);}finally{setSaving(false);}}}
+                      disabled={saving}
+                      style={{width:'100%',padding:'14px',background:saving?'#B4B2A9':a,color:'#fff',border:'none',borderRadius:12,fontSize:18,fontWeight:700,minHeight:52}}>
+                      {saving?'保存中...':'完　了'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {showAnomaly&&<AnomalyModal seiban={''} role={role} line={null} types={anomalyTypes} onClose={()=>setShowAnomaly(false)} onDone={()=>setShowAnomaly(false)}/>}
+    </div>
+  );
 
   return(
     <div className="screen" style={{background:flash?l:'#F1EFE8',transition:'background .35s'}}>
@@ -1206,7 +1283,7 @@ function App(){
   if(err)return<ErrorScreen error={err} onRetry={()=>window.location.reload()}/>;
   if(!ready)return<LoadingScreen/>;
 
-  function selectRole(r){setRole(r);if(r==='リフトマン'||r==='製品段取り'||r==='出荷'){setLine(null);setScreen('worker');}else setScreen('lineSelect');}
+  function selectRole(r){setRole(r);if(r==='リフトマン'||r==='製品段取り'||r==='出荷'||r==='ハンガー段取り'){setLine(null);setScreen('worker');}else setScreen('lineSelect');}
 
   if(screen==='home')return<HomeScreen onRole={selectRole} onAdmin={id=>setScreen(id)}/>;
   if(screen==='lineSelect')return<LineSelectScreen role={role} onLine={l=>{setLine(l);setScreen('worker');}} onBack={()=>setScreen('home')}/>;
